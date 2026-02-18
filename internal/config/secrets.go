@@ -1,18 +1,19 @@
 package config
 
 import (
+	"context"
 	"encoding/base64"
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/secretsmanager"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 )
 
 // Secrets ...
 type Secrets struct {
-	svc *secretsmanager.SecretsManager
+	svc *secretsmanager.Client
 }
 
 // NewSecrets ...
-func NewSecrets(svc *secretsmanager.SecretsManager) *Secrets {
+func NewSecrets(svc *secretsmanager.Client) *Secrets {
 	return &Secrets{
 		svc: svc,
 	}
@@ -20,54 +21,54 @@ func NewSecrets(svc *secretsmanager.SecretsManager) *Secrets {
 
 // GoogleAdminEmail ...
 func (s *Secrets) GoogleAdminEmail(secretArn string) (string, error) {
-     if len([]rune(secretArn)) == 0 {
-        return s.getSecret("SSOSyncGoogleAdminEmail")
-     } 
-     return s.getSecret(secretArn)
+	if len([]rune(secretArn)) == 0 {
+		return s.getSecret(context.Background(), "SSOSyncGoogleAdminEmail")
+	}
+	return s.getSecret(context.Background(), secretArn)
 }
 
 // SCIMAccessToken ...
 func (s *Secrets) SCIMAccessToken(secretArn string) (string, error) {
-     if len([]rune(secretArn)) == 0 {
-        return s.getSecret("SSOSyncSCIMAccessToken")
-     }
-     return s.getSecret(secretArn)
+	if len([]rune(secretArn)) == 0 {
+		return s.getSecret(context.Background(), "SSOSyncSCIMAccessToken")
+	}
+	return s.getSecret(context.Background(), secretArn)
 }
 
 // SCIMEndpointURL ...
 func (s *Secrets) SCIMEndpointURL(secretArn string) (string, error) {
-     if len([]rune(secretArn)) == 0 {
-        return s.getSecret("SSOSyncSCIMEndpointURL")
-     }
-     return s.getSecret(secretArn)
+	if len([]rune(secretArn)) == 0 {
+		return s.getSecret(context.Background(), "SSOSyncSCIMEndpointURL")
+	}
+	return s.getSecret(context.Background(), secretArn)
 }
 
 // GoogleCredentials ...
 func (s *Secrets) GoogleCredentials(secretArn string) (string, error) {
-     if len([]rune(secretArn)) == 0 {
-        return s.getSecret("SSOSyncGoogleCredentials")
-     }
-     return s.getSecret(secretArn)
+	if len([]rune(secretArn)) == 0 {
+		return s.getSecret(context.Background(), "SSOSyncGoogleCredentials")
+	}
+	return s.getSecret(context.Background(), secretArn)
 }
 
 // Region ...
 func (s *Secrets) Region(secretArn string) (string, error) {
-     if len([]rune(secretArn)) == 0 {
-        return s.getSecret("SSOSyncRegion")
-     }
-     return s.getSecret(secretArn)
+	if len([]rune(secretArn)) == 0 {
+		return s.getSecret(context.Background(), "SSOSyncRegion")
+	}
+	return s.getSecret(context.Background(), secretArn)
 }
 
 // IdentityStoreID ...
 func (s *Secrets) IdentityStoreID(secretArn string) (string, error) {
-     if len([]rune(secretArn)) == 0 {
-        return s.getSecret("IdentityStoreID")
-     }
-     return s.getSecret(secretArn)
+	if len([]rune(secretArn)) == 0 {
+		return s.getSecret(context.Background(), "IdentityStoreID")
+	}
+	return s.getSecret(context.Background(), secretArn)
 }
 
-func (s *Secrets) getSecret(secretKey string) (string, error) {
-	r, err := s.svc.GetSecretValue(&secretsmanager.GetSecretValueInput{
+func (s *Secrets) getSecret(ctx context.Context, secretKey string) (string, error) {
+	r, err := s.svc.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
 		SecretId:     aws.String(secretKey),
 		VersionStage: aws.String("AWSCURRENT"),
 	})
@@ -91,6 +92,3 @@ func (s *Secrets) getSecret(secretKey string) (string, error) {
 
 	return secretString, nil
 }
-
-
-

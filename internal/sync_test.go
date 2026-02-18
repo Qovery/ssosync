@@ -23,8 +23,8 @@ import (
 	"strconv"
 	"testing"
 
-	aws_sdk "github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/identitystore"
+	"github.com/aws/aws-sdk-go-v2/service/identitystore"
+	"github.com/aws/aws-sdk-go-v2/service/identitystore/types"
 	"github.com/awslabs/ssosync/internal/aws"
 	"github.com/awslabs/ssosync/internal/config"
 	"github.com/awslabs/ssosync/internal/mocks"
@@ -374,13 +374,22 @@ func Test_GetGroupsWithoutPagination(t *testing.T) {
 		users:               make(map[string]*aws.User),
 	}
 
+	groupId1 := "group-1-test-id"
+	groupId2 := "group-2-test-id"
+	groupId3 := "group-3-test-id"
+	groupId4 := "group-4-test-id"
+	displayName1 := "group-1-test-displayname"
+	displayName2 := "group-2-test-displayname"
+	displayName3 := "group-3-test-displayname"
+	displayName4 := "group-4-test-displayname"
+
 	// >1 group response with no pagination (<100 groups returned)
 	sampleResponseNoPagination := &identitystore.ListGroupsOutput{
-		Groups: []*identitystore.Group{
-			{GroupId: aws_sdk.String("group-1-test-id"), DisplayName: aws_sdk.String("group-1-test-displayname")},
-			{GroupId: aws_sdk.String("group-2-test-id"), DisplayName: aws_sdk.String("group-2-test-displayname")},
-			{GroupId: aws_sdk.String("group-3-test-id"), DisplayName: aws_sdk.String("group-3-test-displayname")},
-			{GroupId: aws_sdk.String("group-4-test-id"), DisplayName: aws_sdk.String("group-4-test-displayname")},
+		Groups: []types.Group{
+			{GroupId: &groupId1, DisplayName: &displayName1},
+			{GroupId: &groupId2, DisplayName: &displayName2},
+			{GroupId: &groupId3, DisplayName: &displayName3},
+			{GroupId: &groupId4, DisplayName: &displayName4},
 		},
 	}
 
@@ -391,12 +400,7 @@ func Test_GetGroupsWithoutPagination(t *testing.T) {
 		{ID: "group-4-test-id", Schemas: []string{"urn:ietf:params:scim:schemas:core:2.0:Group"}, DisplayName: "group-4-test-displayname", Members: []string{}},
 	}
 
-	callbackWithSampleResp := func(inp *identitystore.ListGroupsInput, callback func(output *identitystore.ListGroupsOutput, lastPage bool) bool) {
-		ListGroupsPagesCallbackFn(sampleResponseNoPagination, false)
-	}
-
-	mockIdentityStoreClient.EXPECT().ListGroupsPages(gomock.Any(), gomock.Any()).MaxTimes(1).
-		Do(callbackWithSampleResp).Return(nil)
+	mockIdentityStoreClient.EXPECT().ListGroups(gomock.Any(), gomock.Any()).MaxTimes(1).Return(sampleResponseNoPagination, nil)
 
 	actualOutput, err := mockClient.GetGroups()
 
@@ -419,15 +423,16 @@ func Test_GetGroupsWithPagination(t *testing.T) {
 	}
 
 	// >1 group response with pagination (150 groups returned)
-	sampleGroupsResponseA := make([]*identitystore.Group, 0, 100)
-	sampleGroupsResponseB := make([]*identitystore.Group, 0, 50)
+	sampleGroupsResponseA := make([]types.Group, 0, 100)
+	sampleGroupsResponseB := make([]types.Group, 0, 50)
 	expectedOutput := make([]*aws.Group, 0, 150)
 
 	// Populate responses
 	for i := 0; i < 150; i++ {
-		grp := &identitystore.Group{
-			GroupId:     aws_sdk.String(strconv.Itoa(i)),
-			DisplayName: aws_sdk.String(strconv.Itoa(i)),
+		id := strconv.Itoa(i)
+		grp := types.Group{
+			GroupId:     &id,
+			DisplayName: &id,
 		}
 		grpNative := aws.Group{
 			ID:          strconv.Itoa(i),
@@ -445,22 +450,20 @@ func Test_GetGroupsWithPagination(t *testing.T) {
 		}
 	}
 
-	sampleResponsePaginationA := identitystore.ListGroupsOutput{
+	nextToken := "sample NextToken"
+	sampleResponsePaginationA := &identitystore.ListGroupsOutput{
 		Groups:    sampleGroupsResponseA,
-		NextToken: aws_sdk.String("sample NextToken"),
+		NextToken: &nextToken,
 	}
 
-	sampleResponsePaginationB := identitystore.ListGroupsOutput{
+	sampleResponsePaginationB := &identitystore.ListGroupsOutput{
 		Groups: sampleGroupsResponseB,
 	}
 
-	callbackWithSampleResp := func(inp *identitystore.ListGroupsInput, callback func(output *identitystore.ListGroupsOutput, lastPage bool) bool) {
-		ListGroupsPagesCallbackFn(&sampleResponsePaginationA, true)
-		ListGroupsPagesCallbackFn(&sampleResponsePaginationB, false)
-	}
-
-	mockIdentityStoreClient.EXPECT().ListGroupsPages(gomock.Any(), gomock.Any()).MaxTimes(1).
-		Do(callbackWithSampleResp).Return(nil)
+	gomock.InOrder(
+		mockIdentityStoreClient.EXPECT().ListGroups(gomock.Any(), gomock.Any()).Return(sampleResponsePaginationA, nil),
+		mockIdentityStoreClient.EXPECT().ListGroups(gomock.Any(), gomock.Any()).Return(sampleResponsePaginationB, nil),
+	)
 
 	actualOutput, err := mockClient.GetGroups()
 
@@ -482,16 +485,11 @@ func Test_GetGroupsEmptyResponse(t *testing.T) {
 		users:               make(map[string]*aws.User),
 	}
 
-	sampleResponseNoGroups := &identitystore.ListGroupsOutput{Groups: []*identitystore.Group{}}
+	sampleResponseNoGroups := &identitystore.ListGroupsOutput{Groups: []types.Group{}}
 
 	expectedOutput := []*aws.Group{}
 
-	callbackWithSampleResp := func(inp *identitystore.ListGroupsInput, callback func(output *identitystore.ListGroupsOutput, lastPage bool) bool) {
-		ListGroupsPagesCallbackFn(sampleResponseNoGroups, false)
-	}
-
-	mockIdentityStoreClient.EXPECT().ListGroupsPages(gomock.Any(), gomock.Any()).MaxTimes(1).
-		Do(callbackWithSampleResp).Return(nil)
+	mockIdentityStoreClient.EXPECT().ListGroups(gomock.Any(), gomock.Any()).MaxTimes(1).Return(sampleResponseNoGroups, nil)
 
 	actualOutput, err := mockClient.GetGroups()
 
@@ -517,7 +515,7 @@ func Test_GetGroupsErrorResponse(t *testing.T) {
 
 	expectedOutput := errors.New("Sample error")
 
-	mockIdentityStoreClient.EXPECT().ListGroupsPages(gomock.Any(), gomock.Any()).MaxTimes(1).Return(sampleResponseError)
+	mockIdentityStoreClient.EXPECT().ListGroups(gomock.Any(), gomock.Any()).MaxTimes(1).Return(nil, sampleResponseError)
 
 	actualOutput, err := mockClient.GetGroups()
 
@@ -539,27 +537,50 @@ func Test_GetUsersWithoutPagination(t *testing.T) {
 		users:               make(map[string]*aws.User),
 	}
 
+	userId1 := "user-1-test-id"
+	userName1 := "user-1@example.com"
+	title1 := "Example title"
+	familyName1 := "1"
+	givenName1 := "User"
+	displayName1 := "User 1"
+	addrType1 := "Home"
+	country1 := "Canada"
+	emailType1 := "work"
+	emailValue1 := "user-1@example.com"
+
+	userId2 := "user-2-test-id"
+	userName2 := "user-2@example.com"
+	familyName2 := "2"
+	givenName2 := "User"
+	displayName2 := "User 2"
+	addrType2a := "Work"
+	addrType2b := "Home"
+	emailType2a := "work"
+	emailValue2a := "user-2@example.com"
+	emailType2b := "personal"
+	emailValue2b := "user-2-personal@example.com"
+
 	// >1 user response with no pagination (<100 users returned)
 	sampleResponseNoPagination := &identitystore.ListUsersOutput{
-		Users: []*identitystore.User{
+		Users: []types.User{
 			{
-				UserId:      aws_sdk.String("user-1-test-id"),
-				UserName:    aws_sdk.String("user-1@example.com"),
-				Title:       aws_sdk.String("Example title"),
-				Name:        &identitystore.Name{FamilyName: aws_sdk.String("1"), GivenName: aws_sdk.String("User")},
-				DisplayName: aws_sdk.String("User 1"),
-				Addresses:   []*identitystore.Address{{Type: aws_sdk.String("Home"), Country: aws_sdk.String("Canada")}},
-				Emails:      []*identitystore.Email{{Primary: aws_sdk.Bool(true), Type: aws_sdk.String("work"), Value: aws_sdk.String("user-1@example.com")}},
+				UserId:      &userId1,
+				UserName:    &userName1,
+				Title:       &title1,
+				Name:        &types.Name{FamilyName: &familyName1, GivenName: &givenName1},
+				DisplayName: &displayName1,
+				Addresses:   []types.Address{{Type: &addrType1, Country: &country1}},
+				Emails:      []types.Email{{Primary: true, Type: &emailType1, Value: &emailValue1}},
 			},
 			{
-				UserId:      aws_sdk.String("user-2-test-id"),
-				UserName:    aws_sdk.String("user-2@example.com"),
-				Name:        &identitystore.Name{FamilyName: aws_sdk.String("2"), GivenName: aws_sdk.String("User")},
-				DisplayName: aws_sdk.String("User 2"),
-				Addresses:   []*identitystore.Address{{Type: aws_sdk.String("Work")}, {Type: aws_sdk.String("Home")}},
-				Emails: []*identitystore.Email{
-					{Primary: aws_sdk.Bool(true), Type: aws_sdk.String("work"), Value: aws_sdk.String("user-2@example.com")},
-					{Primary: aws_sdk.Bool(false), Type: aws_sdk.String("personal"), Value: aws_sdk.String("user-2-personal@example.com")},
+				UserId:      &userId2,
+				UserName:    &userName2,
+				Name:        &types.Name{FamilyName: &familyName2, GivenName: &givenName2},
+				DisplayName: &displayName2,
+				Addresses:   []types.Address{{Type: &addrType2a}, {Type: &addrType2b}},
+				Emails: []types.Email{
+					{Primary: true, Type: &emailType2a, Value: &emailValue2a},
+					{Primary: false, Type: &emailType2b, Value: &emailValue2b},
 				},
 			},
 		},
@@ -603,12 +624,7 @@ func Test_GetUsersWithoutPagination(t *testing.T) {
 		},
 	}
 
-	callbackWithSampleResp := func(inp *identitystore.ListUsersInput, callback func(output *identitystore.ListUsersOutput, lastPage bool) bool) {
-		ListUsersPagesCallbackFn(sampleResponseNoPagination, false)
-	}
-
-	mockIdentityStoreClient.EXPECT().ListUsersPages(gomock.Any(), gomock.Any()).MaxTimes(1).
-		Do(callbackWithSampleResp).Return(nil)
+	mockIdentityStoreClient.EXPECT().ListUsers(gomock.Any(), gomock.Any()).MaxTimes(1).Return(sampleResponseNoPagination, nil)
 
 	actualOutput, err := mockClient.GetUsers()
 
@@ -631,19 +647,26 @@ func Test_GetUsersWithPagination(t *testing.T) {
 	}
 
 	// >1 user response with pagination (150 users returned)
-	sampleUsersResponseA := make([]*identitystore.User, 0, 100)
-	sampleUsersResponseB := make([]*identitystore.User, 0, 50)
+	sampleUsersResponseA := make([]types.User, 0, 100)
+	sampleUsersResponseB := make([]types.User, 0, 50)
 	expectedOutput := make([]*aws.User, 0, 150)
 
 	// Populate responses
 	for i := 0; i < 150; i++ {
-		usr := &identitystore.User{
-			UserId:      aws_sdk.String(strconv.Itoa(i)),
-			UserName:    aws_sdk.String(strconv.Itoa(i)),
-			DisplayName: aws_sdk.String("User " + strconv.Itoa(i)),
-			Name:        &identitystore.Name{FamilyName: aws_sdk.String(strconv.Itoa(i)), GivenName: aws_sdk.String("User")},
-			Emails:      []*identitystore.Email{{Primary: aws_sdk.Bool(true), Type: aws_sdk.String("work"), Value: aws_sdk.String(strconv.Itoa(i) + "@example.com")}},
-			Addresses:   []*identitystore.Address{{Type: aws_sdk.String("Home"), Primary: aws_sdk.Bool(true)}},
+		id := strconv.Itoa(i)
+		displayNameStr := "User " + strconv.Itoa(i)
+		emailTypeStr := "work"
+		emailValueStr := strconv.Itoa(i) + "@example.com"
+		addrTypeStr := "Home"
+		givenNameStr := "User"
+
+		usr := types.User{
+			UserId:      &id,
+			UserName:    &id,
+			DisplayName: &displayNameStr,
+			Name:        &types.Name{FamilyName: &id, GivenName: &givenNameStr},
+			Emails:      []types.Email{{Primary: true, Type: &emailTypeStr, Value: &emailValueStr}},
+			Addresses:   []types.Address{{Type: &addrTypeStr}},
 		}
 		usrNative := aws.User{
 			ID:       strconv.Itoa(i),
@@ -670,22 +693,20 @@ func Test_GetUsersWithPagination(t *testing.T) {
 		}
 	}
 
-	sampleResponsePaginationA := identitystore.ListUsersOutput{
+	nextToken := "sample NextToken"
+	sampleResponsePaginationA := &identitystore.ListUsersOutput{
 		Users:     sampleUsersResponseA,
-		NextToken: aws_sdk.String("sample NextToken"),
+		NextToken: &nextToken,
 	}
 
-	sampleResponsePaginationB := identitystore.ListUsersOutput{
+	sampleResponsePaginationB := &identitystore.ListUsersOutput{
 		Users: sampleUsersResponseB,
 	}
 
-	callbackWithSampleResp := func(inp *identitystore.ListUsersInput, callback func(output *identitystore.ListUsersOutput, lastPage bool) bool) {
-		ListUsersPagesCallbackFn(&sampleResponsePaginationA, true)
-		ListUsersPagesCallbackFn(&sampleResponsePaginationB, false)
-	}
-
-	mockIdentityStoreClient.EXPECT().ListUsersPages(gomock.Any(), gomock.Any()).MaxTimes(1).
-		Do(callbackWithSampleResp).Return(nil)
+	gomock.InOrder(
+		mockIdentityStoreClient.EXPECT().ListUsers(gomock.Any(), gomock.Any()).Return(sampleResponsePaginationA, nil),
+		mockIdentityStoreClient.EXPECT().ListUsers(gomock.Any(), gomock.Any()).Return(sampleResponsePaginationB, nil),
+	)
 
 	actualOutput, err := mockClient.GetUsers()
 
@@ -712,12 +733,7 @@ func Test_GetUsersEmptyResponse(t *testing.T) {
 
 	expectedOutput := []*aws.User{}
 
-	callbackWithSampleResp := func(inp *identitystore.ListUsersInput, callback func(output *identitystore.ListUsersOutput, lastPage bool) bool) {
-		ListUsersPagesCallbackFn(sampleResponseNoPagination, false)
-	}
-
-	mockIdentityStoreClient.EXPECT().ListUsersPages(gomock.Any(), gomock.Any()).MaxTimes(1).
-		Do(callbackWithSampleResp).Return(nil)
+	mockIdentityStoreClient.EXPECT().ListUsers(gomock.Any(), gomock.Any()).MaxTimes(1).Return(sampleResponseNoPagination, nil)
 
 	actualOutput, err := mockClient.GetUsers()
 
@@ -743,7 +759,7 @@ func Test_GetUsersErrorResponse(t *testing.T) {
 
 	expectedOutput := errors.New("Sample error")
 
-	mockIdentityStoreClient.EXPECT().ListUsersPages(gomock.Any(), gomock.Any()).MaxTimes(1).Return(sampleResponseError)
+	mockIdentityStoreClient.EXPECT().ListUsers(gomock.Any(), gomock.Any()).MaxTimes(1).Return(nil, sampleResponseError)
 
 	actualOutput, err := mockClient.GetUsers()
 
@@ -755,15 +771,26 @@ func Test_ConvertSdkUserObjToNative(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
+	userId := "user-1-test-id"
+	userName := "user-1@example.com"
+	title := "Example title"
+	familyName := "1"
+	givenName := "User"
+	displayName := "User 1"
+	addrType := "Home"
+	country := "Canada"
+	emailType := "work"
+	emailValue := "user-1@example.com"
+
 	// >1 user response with no pagination (<100 users returned)
-	sampleInput := &identitystore.User{
-		UserId:      aws_sdk.String("user-1-test-id"),
-		UserName:    aws_sdk.String("user-1@example.com"),
-		Title:       aws_sdk.String("Example title"),
-		Name:        &identitystore.Name{FamilyName: aws_sdk.String("1"), GivenName: aws_sdk.String("User")},
-		DisplayName: aws_sdk.String("User 1"),
-		Addresses:   []*identitystore.Address{{Type: aws_sdk.String("Home"), Country: aws_sdk.String("Canada")}},
-		Emails:      []*identitystore.Email{{Primary: aws_sdk.Bool(true), Type: aws_sdk.String("work"), Value: aws_sdk.String("user-1@example.com")}},
+	sampleInput := &types.User{
+		UserId:      &userId,
+		UserName:    &userName,
+		Title:       &title,
+		Name:        &types.Name{FamilyName: &familyName, GivenName: &givenName},
+		DisplayName: &displayName,
+		Addresses:   []types.Address{{Type: &addrType, Country: &country}},
+		Emails:      []types.Email{{Primary: true, Type: &emailType, Value: &emailValue}},
 	}
 
 	expectedOutput := &aws.User{
@@ -906,45 +933,33 @@ func Test_GetGroupMembershipsLists(t *testing.T) {
 	expectedOutput["b"] = []*aws.User{{ID: "2"}, {ID: "3"}, {ID: "4"}}
 	expectedOutput["c"] = []*aws.User{}
 
+	groupIdA := "a"
+	groupIdB := "b"
+
 	sampleResponseGroupA := &identitystore.ListGroupMembershipsOutput{
-		GroupMemberships: []*identitystore.GroupMembership{
-			{GroupId: aws_sdk.String("a"), MemberId: &identitystore.MemberId{UserId: aws_sdk.String("1")}},
-			{GroupId: aws_sdk.String("a"), MemberId: &identitystore.MemberId{UserId: aws_sdk.String("2")}},
+		GroupMemberships: []types.GroupMembership{
+			{GroupId: &groupIdA, MemberId: &types.MemberIdMemberUserId{Value: "1"}},
+			{GroupId: &groupIdA, MemberId: &types.MemberIdMemberUserId{Value: "2"}},
 		},
 	}
 
 	sampleResponseGroupB := &identitystore.ListGroupMembershipsOutput{
-		GroupMemberships: []*identitystore.GroupMembership{
-			{GroupId: aws_sdk.String("b"), MemberId: &identitystore.MemberId{UserId: aws_sdk.String("2")}},
-			{GroupId: aws_sdk.String("b"), MemberId: &identitystore.MemberId{UserId: aws_sdk.String("3")}},
-			{GroupId: aws_sdk.String("b"), MemberId: &identitystore.MemberId{UserId: aws_sdk.String("4")}},
+		GroupMemberships: []types.GroupMembership{
+			{GroupId: &groupIdB, MemberId: &types.MemberIdMemberUserId{Value: "2"}},
+			{GroupId: &groupIdB, MemberId: &types.MemberIdMemberUserId{Value: "3"}},
+			{GroupId: &groupIdB, MemberId: &types.MemberIdMemberUserId{Value: "4"}},
 		},
 	}
 
 	sampleResponseGroupC := &identitystore.ListGroupMembershipsOutput{
-		GroupMemberships: []*identitystore.GroupMembership{},
+		GroupMemberships: []types.GroupMembership{},
 	}
 
-	callbackWithSampleRespGroupA := func(inp *identitystore.ListGroupMembershipsInput, callback func(output *identitystore.ListGroupMembershipsOutput, lastPage bool) bool) {
-		ListGroupMembershipPagesCallbackFn(sampleResponseGroupA, false)
-	}
-
-	callbackWithSampleRespGroupB := func(inp *identitystore.ListGroupMembershipsInput, callback func(output *identitystore.ListGroupMembershipsOutput, lastPage bool) bool) {
-		ListGroupMembershipPagesCallbackFn(sampleResponseGroupB, false)
-	}
-
-	callbackWithSampleRespGroupC := func(inp *identitystore.ListGroupMembershipsInput, callback func(output *identitystore.ListGroupMembershipsOutput, lastPage bool) bool) {
-		ListGroupMembershipPagesCallbackFn(sampleResponseGroupC, false)
-	}
-
-	mockIdentityStoreClient.EXPECT().ListGroupMembershipsPages(gomock.Any(), gomock.Any()).MaxTimes(1).
-		Do(callbackWithSampleRespGroupA).Return(nil)
-
-	mockIdentityStoreClient.EXPECT().ListGroupMembershipsPages(gomock.Any(), gomock.Any()).MaxTimes(1).
-		Do(callbackWithSampleRespGroupB).Return(nil)
-
-	mockIdentityStoreClient.EXPECT().ListGroupMembershipsPages(gomock.Any(), gomock.Any()).MaxTimes(1).
-		Do(callbackWithSampleRespGroupC).Return(nil)
+	gomock.InOrder(
+		mockIdentityStoreClient.EXPECT().ListGroupMemberships(gomock.Any(), gomock.Any()).Return(sampleResponseGroupA, nil),
+		mockIdentityStoreClient.EXPECT().ListGroupMemberships(gomock.Any(), gomock.Any()).Return(sampleResponseGroupB, nil),
+		mockIdentityStoreClient.EXPECT().ListGroupMemberships(gomock.Any(), gomock.Any()).Return(sampleResponseGroupC, nil),
+	)
 
 	actualOutput, err := mockClient.GetGroupMembershipsLists(sampleGroupsInput, sampleUsersMapInput)
 
@@ -969,18 +984,20 @@ func Test_IsUserInGroup(t *testing.T) {
 	sampleUserInput := &aws.User{ID: "test-user-id"}
 	sampleGroupInput := &aws.Group{ID: "test-group-id"}
 
+	groupId := "test-group-id"
+
 	// True response
 	sampleResponse := &identitystore.IsMemberInGroupsOutput{
-		Results: []*identitystore.GroupMembershipExistenceResult{
+		Results: []types.GroupMembershipExistenceResult{
 			{
-				GroupId:          aws_sdk.String("test-group-id"),
-				MemberId:         &identitystore.MemberId{UserId: aws_sdk.String("test-user-id")},
-				MembershipExists: aws_sdk.Bool(true),
+				GroupId:          &groupId,
+				MemberId:         &types.MemberIdMemberUserId{Value: "test-user-id"},
+				MembershipExists: true,
 			},
 		},
 	}
 
-	mockIdentityStoreClient.EXPECT().IsMemberInGroups(gomock.Any()).MaxTimes(1).Return(sampleResponse, nil)
+	mockIdentityStoreClient.EXPECT().IsMemberInGroups(gomock.Any(), gomock.Any()).MaxTimes(1).Return(sampleResponse, nil)
 
 	actualOutput, err := mockClient.IsUserInGroup(sampleUserInput, sampleGroupInput)
 
@@ -988,9 +1005,9 @@ func Test_IsUserInGroup(t *testing.T) {
 	assert.Nil(t, err)
 
 	// False response
-	sampleResponse.Results[0].MembershipExists = aws_sdk.Bool(false)
+	sampleResponse.Results[0].MembershipExists = false
 
-	mockIdentityStoreClient.EXPECT().IsMemberInGroups(gomock.Any()).MaxTimes(1).Return(sampleResponse, nil)
+	mockIdentityStoreClient.EXPECT().IsMemberInGroups(gomock.Any(), gomock.Any()).MaxTimes(1).Return(sampleResponse, nil)
 
 	actualOutput, err = mockClient.IsUserInGroup(sampleUserInput, sampleGroupInput)
 
@@ -1001,7 +1018,7 @@ func Test_IsUserInGroup(t *testing.T) {
 	sampleResponseErr := errors.New("Sample error")
 	expectedResponse := errors.New("Sample error")
 
-	mockIdentityStoreClient.EXPECT().IsMemberInGroups(gomock.Any()).MaxTimes(1).Return(nil, sampleResponseErr)
+	mockIdentityStoreClient.EXPECT().IsMemberInGroups(gomock.Any(), gomock.Any()).MaxTimes(1).Return(nil, sampleResponseErr)
 
 	actualOutput, _ = mockClient.IsUserInGroup(sampleUserInput, sampleGroupInput)
 
@@ -1026,17 +1043,13 @@ func Test_RemoveUserFromGroup(t *testing.T) {
 	sampleUserInput := "test-user-id"
 	sampleGroupInput := "test-group-id"
 
+	membershipId := "test-membership-id"
 	sampleResponse := &identitystore.GetGroupMembershipIdOutput{
-		MembershipId: aws_sdk.String("test-membership-id"),
+		MembershipId: &membershipId,
 	}
 
-	mockIdentityStoreClient.EXPECT().GetGroupMembershipId(gomock.Any()).MaxTimes(1).Return(sampleResponse, nil)
-	mockIdentityStoreClient.EXPECT().DeleteGroupMembership(
-		&identitystore.DeleteGroupMembershipInput{
-			IdentityStoreId: &mockClient.cfg.IdentityStoreID,
-			MembershipId:    sampleResponse.MembershipId,
-		},
-	).MaxTimes(1).Return(&identitystore.DeleteGroupMembershipOutput{}, nil)
+	mockIdentityStoreClient.EXPECT().GetGroupMembershipId(gomock.Any(), gomock.Any()).MaxTimes(1).Return(sampleResponse, nil)
+	mockIdentityStoreClient.EXPECT().DeleteGroupMembership(gomock.Any(), gomock.Any()).MaxTimes(1).Return(&identitystore.DeleteGroupMembershipOutput{}, nil)
 
 	err := mockClient.RemoveUserFromGroup(&sampleUserInput, &sampleGroupInput)
 
