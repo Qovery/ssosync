@@ -19,7 +19,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 	"path"
@@ -29,11 +29,11 @@ import (
 
 var (
 	// ErrUserNotFound
-	ErrUserNotFound      = errors.New("user not found")
+	ErrUserNotFound = errors.New("user not found")
 	// ErrGroupNotFound
-	ErrGroupNotFound     = errors.New("group not found")
+	ErrGroupNotFound = errors.New("group not found")
 	// ErrUserNotSpecified
-	ErrUserNotSpecified  = errors.New("user not specified")
+	ErrUserNotSpecified = errors.New("user not specified")
 )
 
 // ErrHTTPNotOK
@@ -115,7 +115,7 @@ func (c *client) sendRequestWithBody(method string, url string, body interface{}
 	defer resp.Body.Close()
 
 	// Read the body back from the response
-	response, err = ioutil.ReadAll(resp.Body)
+	response, err = io.ReadAll(resp.Body)
 	if err != nil {
 		return
 	}
@@ -144,7 +144,7 @@ func (c *client) sendRequest(method string, url string) (response []byte, err er
 	}
 
 	defer resp.Body.Close()
-	response, err = ioutil.ReadAll(resp.Body)
+	response, err = io.ReadAll(resp.Body)
 	if err != nil {
 		return
 	}
